@@ -20,9 +20,12 @@ import {
   PAGEINK_FONT_OPTIONS,
   clampNorm,
   exportPdfWithAnnotations,
+  getPageWhiteoutRects,
   newAnnotationId,
+  withUpdatedWhiteout,
   type TextAnnotation,
 } from "@korykaai/pageink-core";
+import { extractTextAnnotations } from "@/lib/pdf-text-extract";
 import { loadPdfDocument, renderPdfPage } from "@/lib/pdf-viewer";
 
 type EditorMode = "select" | "add";
@@ -60,8 +63,9 @@ export function PageInkEditor() {
   const [rendering, setRendering] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const [mode, setMode] = useState<EditorMode>("add");
+  const [mode, setMode] = useState<EditorMode>("select");
   const [annotations, setAnnotations] = useState<TextAnnotation[]>([]);
+  const [extractedCount, setExtractedCount] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [history, setHistory] = useState<TextAnnotation[][]>([[]]);
   const [historyIndex, setHistoryIndex] = useState(0);
@@ -152,6 +156,7 @@ export function PageInkEditor() {
     setHistoryIndex(0);
     setSelectedId(null);
     setStatus(null);
+    setExtractedCount(0);
   }, []);
 
   const loadFile = useCallback(async (file: File) => {
@@ -172,15 +177,43 @@ export function PageInkEditor() {
       setFileName(file.name);
       setPageCount(doc.numPages);
       setPageIndex(0);
-      setAnnotations([]);
-      setHistory([[]]);
-      setHistoryIndex(0);
       setSelectedId(null);
-      setStatus(null);
+
+      setStatus("Extracting existing text…");
+      const extracted = await extractTextAnnotations(doc);
+      setExtractedCount(extracted.length);
+      setAnnotations(extracted);
+      setHistory([extracted]);
+      setHistoryIndex(0);
+      setMode(extracted.length > 0 ? "select" : "add");
+
+      if (extracted.length > 0) {
+        setStatus(
+          `Found ${extracted.length} editable text block${extracted.length === 1 ? "" : "s"} — click any text to edit.`,
+        );
+      } else {
+        setStatus(
+          "No text layer found (this may be a scanned PDF). You can still add new text.",
+        );
+      }
     } catch {
       setStatus("Could not open this PDF. It may be encrypted or corrupted.");
     }
   }, []);
+
+  const pageWhiteouts = useMemo(
+    () => getPageWhiteoutRects(annotations, pageIndex),
+    [
+      pageIndex,
+      annotations
+        .filter((annotation) => annotation.pageIndex === pageIndex && annotation.source === "extracted")
+        .map(
+          (annotation) =>
+            `${annotation.id}:${annotation.x}:${annotation.y}:${annotation.whiteout?.x}:${annotation.whiteout?.y}:${annotation.whiteout?.width}:${annotation.whiteout?.height}`,
+        )
+        .join("|"),
+    ],
+  );
 
   useEffect(() => {
     if (!pdfDoc || !canvasRef.current) {
@@ -197,6 +230,7 @@ export function PageInkEditor() {
           pageIndex,
           canvas: canvasRef.current!,
           scale: RENDER_SCALE,
+          whiteoutRegions: pageWhiteouts,
         });
         if (cancelled) {
           return;
@@ -216,7 +250,7 @@ export function PageInkEditor() {
     return () => {
       cancelled = true;
     };
-  }, [pdfDoc, pageIndex]);
+  }, [pageIndex, pageWhiteouts, pdfDoc]);
 
   useEffect(() => {
     function onKeyDown(e: globalThis.KeyboardEvent) {
@@ -281,6 +315,7 @@ export function PageInkEditor() {
     const ann: TextAnnotation = {
       id: newAnnotationId(),
       pageIndex,
+      source: "added",
       x,
       y,
       text: PAGEINK_DEFAULT_TEXT,
@@ -320,11 +355,17 @@ export function PageInkEditor() {
     const dx = (e.clientX - drag.startX) / rect.width;
     const dy = (e.clientY - drag.startY) / rect.height;
     setAnnotations((prev) =>
-      prev.map((a) =>
-        a.id === drag.id
-          ? { ...a, x: clampNorm(drag.originX + dx), y: clampNorm(drag.originY + dy) }
-          : a,
-      ),
+      prev.map((a) => {
+        if (a.id !== drag.id) {
+          return a;
+        }
+        const moved = {
+          ...a,
+          x: clampNorm(drag.originX + dx),
+          y: clampNorm(drag.originY + dy),
+        };
+        return a.source === "extracted" ? withUpdatedWhiteout(moved) : moved;
+      }),
     );
   }
 
@@ -368,7 +409,7 @@ export function PageInkEditor() {
           <div>
             <h1 className="pageink-header__title">PageInk</h1>
             <p className="pageink-header__tagline">
-              Add text to any PDF — private, in your browser.
+              Add and edit text on any PDF — private, in your browser.
             </p>
           </div>
         </div>
@@ -408,7 +449,7 @@ export function PageInkEditor() {
                 className={`pageink-tool${mode === "select" ? " pageink-tool--active" : ""}`}
                 onClick={() => setMode("select")}
               >
-                Select / move
+                Edit / move
               </button>
             </div>
             <div className="pageink-toolbar__group">
@@ -459,7 +500,9 @@ export function PageInkEditor() {
             <aside className="pageink-inspector" aria-label="Text properties">
               {selected ? (
                 <>
-                  <h2 className="pageink-inspector__title">Selected text</h2>
+                  <h2 className="pageink-inspector__title">
+                    {selected.source === "extracted" ? "PDF text" : "Added text"}
+                  </h2>
                   <label className="pageink-field">
                     Content
                     <input
@@ -542,8 +585,10 @@ export function PageInkEditor() {
               ) : (
                 <p className="pageink-inspector__empty">
                   {mode === "add"
-                    ? "Click anywhere on the page to place text."
-                    : "Select a text block to edit font, size, and color."}
+                    ? "Click anywhere on the page to place new text."
+                    : extractedCount > 0
+                      ? "Click existing text on the page to edit it, or use + Add text for new blocks."
+                      : "Select a text block to edit font, size, and color."}
                 </p>
               )}
             </aside>
@@ -564,7 +609,11 @@ export function PageInkEditor() {
                 {pageAnnotations.map((ann) => (
                   <div
                     key={ann.id}
-                    className={`pageink-annotation${selectedId === ann.id ? " pageink-annotation--selected" : ""}`}
+                    className={`pageink-annotation${
+                      selectedId === ann.id ? " pageink-annotation--selected" : ""
+                    }${ann.source === "extracted" ? " pageink-annotation--extracted" : ""}${
+                      ann.text !== ann.originalText ? " pageink-annotation--modified" : ""
+                    }`}
                     style={{
                       left: `${ann.x * 100}%`,
                       top: `${ann.y * 100}%`,
@@ -588,8 +637,8 @@ export function PageInkEditor() {
                 ))}
               </div>
               <p className="pageink-stage__hint">
-                {fileName} · {annotations.length} text block
-                {annotations.length === 1 ? "" : "s"} · Ctrl+Z undo
+                {fileName} · {pageAnnotations.length} on this page · {annotations.length} total
+                {extractedCount > 0 ? ` · ${extractedCount} from PDF` : ""} · Ctrl+Z undo
               </p>
             </div>
           </div>

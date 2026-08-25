@@ -1,5 +1,15 @@
 export type PageInkFontFamily = "helvetica" | "times" | "courier";
 
+export type AnnotationSource = "extracted" | "added";
+
+/** Normalized 0–1 rectangle used to cover original PDF glyphs. */
+export type WhiteoutRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type TextAnnotation = {
   id: string;
   pageIndex: number;
@@ -12,6 +22,15 @@ export type TextAnnotation = {
   color: string;
   fontFamily: PageInkFontFamily;
   bold: boolean;
+  source: AnnotationSource;
+  /** Original PDF text when source is extracted. */
+  originalText?: string;
+  /** Normalized width of the text box. */
+  width?: number;
+  /** Normalized height of the text box. */
+  height?: number;
+  /** Region to paint over before redraw on export and in the canvas preview. */
+  whiteout?: WhiteoutRect;
 };
 
 export type PageInkEditorState = {

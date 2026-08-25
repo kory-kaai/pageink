@@ -12,11 +12,11 @@
   <a href="https://github.com/kory-kaai/pageink/actions/workflows/ci.yml"><img src="https://github.com/kory-kaai/pageink/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node"></a>
-  <a href="https://www.korykaai.com/tools/pdf"><img src="https://img.shields.io/badge/demo-live-2563eb" alt="Live demo"></a>
+  <a href="https://pageink.korykaai.com"><img src="https://img.shields.io/badge/demo-live-2563eb" alt="Live demo"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.korykaai.com/tools/pdf"><strong>Live demo</strong></a> ·
+  <a href="https://pageink.korykaai.com"><strong>Live demo</strong></a> ·
   <a href="#quick-start"><strong>Quick start</strong></a> ·
   <a href="#why-pageink"><strong>Why PageInk?</strong></a> ·
   <a href="packages/core"><strong>Core package</strong></a>
@@ -42,7 +42,7 @@ Everything runs in the browser. Files never leave the device.
 | Package | Purpose |
 | --- | --- |
 | [`@korykaai/pageink-core`](packages/core) | Annotation types, coords, PDF export via pdf-lib |
-| [`@korykaai/pageink-web`](apps/web) | Next.js demo app (matches korykaai.com/tools/pdf) |
+| [`@korykaai/pageink-web`](apps/web) | Next.js app at [pageink.korykaai.com](https://pageink.korykaai.com) |
 
 ## Quick start
 
@@ -68,7 +68,8 @@ No environment variables are required.
 ## Features
 
 - Drag & drop PDF upload
-- Click to add text, drag to move, resize handles
+- Edit existing PDF text (text-layer PDFs) with whiteout + redraw
+- Click to add new text, drag to move
 - Font family, size, color, bold
 - Undo / redo
 - Multi-page navigation
@@ -77,8 +78,8 @@ No environment variables are required.
 
 ## Not in v1
 
-- True rewrite of existing PDF text (glyph-level editing)
-- OCR for scanned PDFs
+- True paragraph reflow (Word-style editing)
+- OCR for scanned PDFs (no text layer)
 - Server-side processing
 - Merge / split / compress (link out instead)
 

@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { hexToRgb } from "./coords.js";
+import { getWhiteoutRect } from "./whiteout.js";
 import type { PageInkFontFamily, TextAnnotation } from "./types.js";
 
 function standardFont(family: PageInkFontFamily, bold: boolean) {
@@ -15,6 +16,26 @@ function standardFont(family: PageInkFontFamily, bold: boolean) {
       return exhaustive;
     }
   }
+}
+
+function drawWhiteout(
+  page: ReturnType<PDFDocument["getPages"]>[number],
+  rect: { x: number; y: number; width: number; height: number },
+) {
+  const { width: pageWidth, height: pageHeight } = page.getSize();
+  const x = rect.x * pageWidth;
+  const boxWidth = rect.width * pageWidth;
+  const boxHeight = rect.height * pageHeight;
+  const y = pageHeight - rect.y * pageHeight - boxHeight;
+
+  page.drawRectangle({
+    x,
+    y,
+    width: boxWidth,
+    height: boxHeight,
+    color: rgb(1, 1, 1),
+    borderWidth: 0,
+  });
 }
 
 export async function exportPdfWithAnnotations(input: {
@@ -37,11 +58,17 @@ export async function exportPdfWithAnnotations(input: {
   }
 
   for (const ann of input.annotations) {
-    if (!ann.text.trim()) {
-      continue;
-    }
     const page = pages[ann.pageIndex];
     if (!page) {
+      continue;
+    }
+
+    const whiteout = getWhiteoutRect(ann);
+    if (whiteout) {
+      drawWhiteout(page, whiteout);
+    }
+
+    if (!ann.text.trim()) {
       continue;
     }
 

@@ -369,6 +369,19 @@
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35);
 }
 
+.pageink-annotation--extracted:not(.pageink-annotation--selected):not(:hover) {
+  border-color: rgba(99, 102, 241, 0.28);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.pageink-annotation--modified {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.pageink-annotation--extracted.pageink-annotation--selected {
+  border-style: solid;
+}
+
 .pageink-annotation:active {
   cursor: grabbing;
 }
