@@ -26,6 +26,13 @@ export type TextAnnotation = {
   /** Original PDF text when source is extracted. */
   originalText?: string;
   /**
+   * PDF.js internal font key (e.g. "g_d0_f3") for extracted blocks. The real font
+   * name (and thus weight/family) is only known once the page renders and the font
+   * lands in commonObjs, so this key lets a post-render pass recover it. Not used
+   * on export.
+   */
+  sourceFontKey?: string;
+  /**
    * Extracted blocks only cover the original glyphs once the user changes them.
    * Until then the untouched PDF rendering stays visible.
    */

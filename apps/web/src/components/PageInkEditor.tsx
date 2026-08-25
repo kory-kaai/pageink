@@ -27,8 +27,8 @@ import {
   type TextAnnotation,
   type WhiteoutRect,
 } from "@korykaai/pageink-core";
-import { extractTextAnnotations } from "@/lib/pdf-text-extract";
-import { loadPdfDocument, renderPdfPage } from "@/lib/pdf-viewer";
+import { extractTextAnnotations, resolveExtractedFontStyles } from "@/lib/pdf-text-extract";
+import { isBenignRenderError, loadPdfDocument, renderPdfPage } from "@/lib/pdf-viewer";
 import { sampleTextColor } from "@/lib/text-color";
 
 type EditorMode = "select" | "add";
@@ -95,7 +95,10 @@ export function PageInkEditor() {
   const [drag, setDrag] = useState<DragState | null>(null);
   const annotationsRef = useRef(annotations);
   annotationsRef.current = annotations;
+  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
+  pdfDocRef.current = pdfDoc;
   const sampledPagesRef = useRef<Set<number>>(new Set());
+  const resolvedFontPagesRef = useRef<Set<number>>(new Set());
 
   const selected = useMemo(
     () => annotations.find((a) => a.id === selectedId) ?? null,
@@ -188,6 +191,7 @@ export function PageInkEditor() {
     setStatus(null);
     setExtractedCount(0);
     sampledPagesRef.current = new Set();
+    resolvedFontPagesRef.current = new Set();
   }, []);
 
   /**
@@ -236,6 +240,53 @@ export function PageInkEditor() {
     setHistory((prev) => prev.map(applyColors));
   }, []);
 
+  /**
+   * Recover real weight/family once the page has rendered. Text extraction only
+   * exposes generic families (so bold is lost); the loaded fonts become readable
+   * in commonObjs after render, letting us mark bold blocks bold in the inspector.
+   */
+  const resolveFontsForPage = useCallback((page: number) => {
+    const doc = pdfDocRef.current;
+    if (!doc || resolvedFontPagesRef.current.has(page)) {
+      return;
+    }
+    resolvedFontPagesRef.current.add(page);
+
+    const keys = new Set<string>();
+    for (const ann of annotationsRef.current) {
+      if (ann.pageIndex === page && ann.source === "extracted" && ann.sourceFontKey) {
+        keys.add(ann.sourceFontKey);
+      }
+    }
+    if (keys.size === 0) {
+      return;
+    }
+
+    void (async () => {
+      const pdfPage = await doc.getPage(page + 1);
+      const styles = await resolveExtractedFontStyles(pdfPage, [...keys]);
+      if (styles.size === 0) {
+        return;
+      }
+
+      const applyFonts = (list: TextAnnotation[]) =>
+        list.map((a) => {
+          if (a.source !== "extracted" || !a.sourceFontKey) {
+            return a;
+          }
+          const style = styles.get(a.sourceFontKey);
+          if (!style || (a.bold === style.bold && a.fontFamily === style.fontFamily)) {
+            return a;
+          }
+          return { ...a, bold: style.bold, fontFamily: style.fontFamily };
+        });
+
+      // Detecting the original weight is not a user edit, so keep it out of undo history.
+      setAnnotations(applyFonts);
+      setHistory((prev) => prev.map(applyFonts));
+    })();
+  }, []);
+
   const loadFile = useCallback(async (file: File) => {
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
       setStatus("Please choose a PDF file.");
@@ -256,6 +307,7 @@ export function PageInkEditor() {
       setPageIndex(0);
       setSelectedId(null);
       sampledPagesRef.current = new Set();
+      resolvedFontPagesRef.current = new Set();
 
       setStatus("Extracting existing text…");
       const extracted = await extractTextAnnotations(doc);
@@ -323,8 +375,9 @@ export function PageInkEditor() {
         }
         setStageSize({ width: rendered.cssWidth, height: rendered.cssHeight });
         sampleColorsForPage(pageIndex);
-      } catch {
-        if (!cancelled) {
+        resolveFontsForPage(pageIndex);
+      } catch (error) {
+        if (!cancelled && !isBenignRenderError(error)) {
           setStatus("Could not render this page.");
         }
       } finally {
@@ -337,7 +390,7 @@ export function PageInkEditor() {
     return () => {
       cancelled = true;
     };
-  }, [pageIndex, pdfDoc, sampleColorsForPage]);
+  }, [pageIndex, pdfDoc, sampleColorsForPage, resolveFontsForPage]);
 
   useEffect(() => {
     function onKeyDown(e: globalThis.KeyboardEvent) {
@@ -391,10 +444,18 @@ export function PageInkEditor() {
   }
 
   function onStageClick(e: MouseEvent<HTMLDivElement>) {
-    if (mode !== "add" || !pdfDoc) {
+    if (!pdfDoc) {
       return;
     }
-    if ((e.target as HTMLElement).closest(".pageink-annotation")) {
+    const onAnnotation = (e.target as HTMLElement).closest(".pageink-annotation");
+    if (mode !== "add") {
+      // Clicking empty page area clears the current selection box.
+      if (!onAnnotation) {
+        setSelectedId(null);
+      }
+      return;
+    }
+    if (onAnnotation) {
       return;
     }
 

@@ -1,4 +1,4 @@
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 import {
   PAGEINK_DEFAULT_COLOR,
   clampNorm,
@@ -6,6 +6,7 @@ import {
   guessBold,
   guessFontFamily,
   newAnnotationId,
+  type PageInkFontFamily,
   type TextAnnotation,
 } from "@korykaai/pageink-core";
 
@@ -16,8 +17,36 @@ type RawTextItem = {
   width: number;
   height: number;
   fontSize: number;
+  /** PDF.js internal font key (e.g. "g_d0_f2") — used only to split runs. */
   fontName: string;
+  /** Human font name resolved from the loaded font (e.g. "Arial-BoldMT"). */
+  fontRealName: string;
 };
+
+type TextStyle = { fontFamily?: string };
+
+/**
+ * PDF.js text items carry an internal font key (`g_d0_f2`), not a real font name,
+ * so weight and family can't be read from it. The loaded font in `commonObjs`
+ * exposes its PostScript name (e.g. "Arial-BoldMT"); fall back to the style map's
+ * fontFamily when the font object isn't resolved.
+ */
+function resolveFontName(
+  page: PDFPageProxy,
+  styles: Record<string, TextStyle> | undefined,
+  key: string,
+): string {
+  try {
+    const font = page.commonObjs.get(key) as { name?: string } | null;
+    if (font && typeof font.name === "string" && font.name.length > 0) {
+      return font.name;
+    }
+  } catch {
+    // Font not resolved in commonObjs yet — fall through to the style map.
+  }
+  const family = styles?.[key]?.fontFamily;
+  return typeof family === "string" && family.length > 0 ? family : key;
+}
 
 /** Widest horizontal gap, relative to font size, still treated as one run. */
 const RUN_GAP_RATIO = 0.4;
@@ -109,6 +138,7 @@ function joinRun(run: RawTextItem[]): RawTextItem | null {
     height: Math.max(...run.map((part) => part.height)),
     fontSize: first.fontSize,
     fontName: first.fontName,
+    fontRealName: first.fontRealName,
   } satisfies RawTextItem;
 }
 
@@ -140,6 +170,7 @@ export async function extractTextAnnotations(
     const page = await doc.getPage(pageIndex + 1);
     const viewport = page.getViewport({ scale: 1 });
     const textContent = await page.getTextContent();
+    const styles = textContent.styles as Record<string, TextStyle> | undefined;
     const rawItems: RawTextItem[] = [];
 
     for (const item of textContent.items) {
@@ -160,6 +191,7 @@ export async function extractTextAnnotations(
         height: fontHeight,
         fontSize: fontHeight,
         fontName: item.fontName,
+        fontRealName: resolveFontName(page, styles, item.fontName),
       });
     }
 
@@ -179,14 +211,75 @@ export async function extractTextAnnotations(
         height: normH,
         text: item.str,
         originalText: item.str,
+        sourceFontKey: item.fontName,
         fontSize: Math.max(6, Math.round(item.fontSize)),
         color: PAGEINK_DEFAULT_COLOR,
-        fontFamily: guessFontFamily(item.fontName),
-        bold: guessBold(item.fontName),
+        fontFamily: guessFontFamily(item.fontRealName),
+        bold: guessBold(item.fontRealName),
         whiteout: buildWhiteout(normX, normY, normW, normH),
       });
     }
   }
 
   return annotations;
+}
+
+export type ResolvedFontStyle = { bold: boolean; fontFamily: PageInkFontFamily };
+
+/**
+ * Fonts are absent from commonObjs until the page renders, so this returns the
+ * loaded font once available: immediately if already resolved, otherwise via the
+ * callback form, with a timeout so a never-resolved key can't hang the caller.
+ */
+function getCommonFont(
+  page: PDFPageProxy,
+  key: string,
+): Promise<{ name?: string } | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (font: { name?: string } | null) => {
+      if (!settled) {
+        settled = true;
+        resolve(font);
+      }
+    };
+    try {
+      done(page.commonObjs.get(key) as { name?: string } | null);
+      return;
+    } catch {
+      // Not resolved yet — wait for it below.
+    }
+    try {
+      page.commonObjs.get(key, (font: { name?: string } | null) => done(font));
+    } catch {
+      done(null);
+    }
+    setTimeout(() => done(null), 3000);
+  });
+}
+
+/**
+ * Recover real weight and family for extracted blocks after the page has rendered.
+ * PDF.js only exposes generic families ("sans-serif") during text extraction, which
+ * drops bold/italic, so this reads the loaded font's PostScript name (e.g.
+ * "Helvetica-Bold") from commonObjs to detect the true style per font key.
+ */
+export async function resolveExtractedFontStyles(
+  page: PDFPageProxy,
+  keys: string[],
+): Promise<Map<string, ResolvedFontStyle>> {
+  const resolved = new Map<string, ResolvedFontStyle>();
+  await Promise.all(
+    keys.map(async (key) => {
+      const font = await getCommonFont(page, key);
+      const name = font?.name;
+      if (typeof name === "string" && name.length > 0) {
+        resolved.set(key, {
+          bold: guessBold(name),
+          fontFamily: guessFontFamily(name),
+        });
+      }
+    }),
+  );
+  return resolved;
 }

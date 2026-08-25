@@ -1,3 +1,32 @@
+(() => {
+  const define = (proto) => {
+    if (typeof proto.getOrInsert !== "function") {
+      Object.defineProperty(proto, "getOrInsert", {
+        value(key, defaultValue) {
+          if (this.has(key)) return this.get(key);
+          this.set(key, defaultValue);
+          return defaultValue;
+        },
+        configurable: true,
+        writable: true,
+      });
+    }
+    if (typeof proto.getOrInsertComputed !== "function") {
+      Object.defineProperty(proto, "getOrInsertComputed", {
+        value(key, callbackfn) {
+          if (this.has(key)) return this.get(key);
+          const value = callbackfn(key);
+          this.set(key, value);
+          return value;
+        },
+        configurable: true,
+        writable: true,
+      });
+    }
+  };
+  define(Map.prototype);
+  define(WeakMap.prototype);
+})();
 /**
  * @licstart The following is the entire license notice for the
  * JavaScript code in this page
