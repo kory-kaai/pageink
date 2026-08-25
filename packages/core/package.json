@@ -1,0 +1,53 @@
+{
+  "name": "@korykaai/pageink-core",
+  "version": "0.1.0",
+  "description": "PDF text overlay engine — load, place text, undo, and export in the browser",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kory-kaai/pageink.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/kory-kaai/pageink#readme",
+  "bugs": {
+    "url": "https://github.com/kory-kaai/pageink/issues"
+  },
+  "keywords": [
+    "pdf",
+    "pdf-editor",
+    "text-overlay",
+    "pdf-lib",
+    "privacy"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}

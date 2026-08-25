@@ -1,0 +1,43 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Test and build core
+        run: npm run build:core && npm test -w @korykaai/pageink-core
+
+      - name: Check if version is already published
+        id: check
+        working-directory: packages/core
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "@korykaai/pageink-core@${VERSION}" version >/dev/null 2>&1; then
+            echo "Version ${VERSION} is already on npm — skipping publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish core package
+        if: steps.check.outputs.skip != 'true'
+        working-directory: packages/core
+        run: npm publish --provenance --access public

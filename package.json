@@ -1,0 +1,39 @@
+{
+  "name": "pageink",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@11.16.0",
+  "description": "Add text to any PDF in your browser. Private, open source, no upload.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @korykaai/pageink-core && npm run build -w @korykaai/pageink-web",
+    "build:core": "npm run build -w @korykaai/pageink-core",
+    "dev": "npm run dev -w @korykaai/pageink-web",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "pdf",
+    "pdf-editor",
+    "text-overlay",
+    "privacy",
+    "browser",
+    "open-source"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kory-kaai/pageink.git"
+  },
+  "homepage": "https://www.korykaai.com/tools/pdf",
+  "bugs": {
+    "url": "https://github.com/kory-kaai/pageink/issues"
+  },
+  "author": "Kory Kaai"
+}
