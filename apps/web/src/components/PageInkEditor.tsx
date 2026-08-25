@@ -748,18 +748,6 @@ export function PageInkEditor() {
           {status ? <p className="pageink-status">{status}</p> : null}
         </>
       )}
-
-      <footer className="pageink-footer">
-        <a href="https://github.com/kory-kaai/pageink" target="_blank" rel="noopener noreferrer">
-          PageInk on GitHub ↗
-        </a>
-        <a href="https://www.korykaai.com/open-source" target="_blank" rel="noopener noreferrer">
-          All open source
-        </a>
-        <a href="https://www.korykaai.com/tools" target="_blank" rel="noopener noreferrer">
-          More tools
-        </a>
-      </footer>
     </div>
   );
 }

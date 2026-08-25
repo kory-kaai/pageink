@@ -462,24 +462,6 @@
   color: #fca5a5;
 }
 
-.pageink-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  padding-top: 0.5rem;
-  font-size: 0.85rem;
-}
-
-.pageink-footer a {
-  color: #a5b4fc;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.pageink-footer a:hover {
-  text-decoration: underline;
-}
-
 @media (max-width: 900px) {
   .pageink-workspace {
     grid-template-columns: 1fr;

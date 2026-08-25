@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import { KorykaaiSiteFooter } from "@/components/site/KorykaaiSiteFooter";
+import { KorykaaiSiteHeader } from "@/components/site/KorykaaiSiteHeader";
 import "./globals.css";
+import "./korykaai-shell.css";
 import "./pageink.css";
 
 export const metadata: Metadata = {
@@ -16,7 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <main>{children}</main>
+        <KorykaaiSiteHeader />
+        <div className="pageink-app-main">{children}</div>
+        <KorykaaiSiteFooter />
       </body>
     </html>
   );

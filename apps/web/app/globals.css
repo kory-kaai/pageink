@@ -6,8 +6,8 @@ body {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-main {
+.pageink-app-main {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 1.5rem 1rem 2.5rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem) 1rem 0;
 }
