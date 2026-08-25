@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { hexToRgb } from "./coords.js";
-import { getWhiteoutRect } from "./whiteout.js";
+import { getWhiteoutRect, isAnnotationModified } from "./whiteout.js";
 import type { PageInkFontFamily, TextAnnotation } from "./types.js";
 
 function standardFont(family: PageInkFontFamily, bold: boolean) {
@@ -60,6 +60,11 @@ export async function exportPdfWithAnnotations(input: {
   for (const ann of input.annotations) {
     const page = pages[ann.pageIndex];
     if (!page) {
+      continue;
+    }
+
+    // Untouched PDF text is left exactly as the original file drew it.
+    if (!isAnnotationModified(ann)) {
       continue;
     }
 

@@ -25,6 +25,11 @@ export type TextAnnotation = {
   source: AnnotationSource;
   /** Original PDF text when source is extracted. */
   originalText?: string;
+  /**
+   * Extracted blocks only cover the original glyphs once the user changes them.
+   * Until then the untouched PDF rendering stays visible.
+   */
+  modified?: boolean;
   /** Normalized width of the text box. */
   width?: number;
   /** Normalized height of the text box. */

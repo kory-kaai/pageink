@@ -6,7 +6,9 @@ import {
   guessBold,
   guessFontFamily,
   hexToRgb,
+  isAnnotationModified,
   newAnnotationId,
+  withUpdatedWhiteout,
   type TextAnnotation,
 } from "./index.js";
 
@@ -36,21 +38,41 @@ describe("newAnnotationId", () => {
 });
 
 describe("whiteout", () => {
-  it("returns explicit whiteout rects", () => {
-    const annotation: TextAnnotation = {
-      id: "a",
-      pageIndex: 0,
-      x: 0.1,
-      y: 0.2,
-      text: "Hi",
-      fontSize: 12,
-      color: "#111827",
-      fontFamily: "helvetica",
-      bold: false,
-      source: "extracted",
-      whiteout: { x: 0.09, y: 0.19, width: 0.2, height: 0.05 },
-    };
-    expect(getWhiteoutRect(annotation)).toEqual(annotation.whiteout);
+  const extracted: TextAnnotation = {
+    id: "a",
+    pageIndex: 0,
+    x: 0.1,
+    y: 0.2,
+    text: "Hi",
+    originalText: "Hi",
+    fontSize: 12,
+    color: "#111827",
+    fontFamily: "helvetica",
+    bold: false,
+    source: "extracted",
+    whiteout: { x: 0.09, y: 0.19, width: 0.2, height: 0.05 },
+  };
+
+  it("leaves untouched PDF text uncovered", () => {
+    expect(isAnnotationModified(extracted)).toBe(false);
+    expect(getWhiteoutRect(extracted)).toBeNull();
+  });
+
+  it("covers extracted text once its content changed", () => {
+    const edited = { ...extracted, text: "Hello" };
+    expect(isAnnotationModified(edited)).toBe(true);
+    expect(getWhiteoutRect(edited)).toEqual(extracted.whiteout);
+  });
+
+  it("covers extracted text once it is moved", () => {
+    const moved = withUpdatedWhiteout({ ...extracted, x: 0.4 });
+    expect(isAnnotationModified(moved)).toBe(true);
+    expect(getWhiteoutRect(moved)).not.toBeNull();
+  });
+
+  it("never covers newly added text", () => {
+    const added: TextAnnotation = { ...extracted, source: "added", whiteout: undefined };
+    expect(getWhiteoutRect(added)).toBeNull();
   });
 });
 

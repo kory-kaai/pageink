@@ -20,10 +20,12 @@ import {
   PAGEINK_FONT_OPTIONS,
   clampNorm,
   exportPdfWithAnnotations,
-  getPageWhiteoutRects,
+  createWhiteoutForAnnotation,
+  isAnnotationModified,
   newAnnotationId,
   withUpdatedWhiteout,
   type TextAnnotation,
+  type WhiteoutRect,
 } from "@korykaai/pageink-core";
 import { extractTextAnnotations } from "@/lib/pdf-text-extract";
 import { loadPdfDocument, renderPdfPage } from "@/lib/pdf-viewer";
@@ -97,7 +99,13 @@ export function PageInkEditor() {
   const updateAnnotation = useCallback(
     (id: string, patch: Partial<TextAnnotation>) => {
       commitAnnotations(
-        annotations.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+        annotations.map((a) => {
+          if (a.id !== id) {
+            return a;
+          }
+          const next = { ...a, ...patch };
+          return a.source === "extracted" ? withUpdatedWhiteout(next) : next;
+        }),
       );
     },
     [annotations, commitAnnotations],
@@ -201,18 +209,27 @@ export function PageInkEditor() {
     }
   }, []);
 
+  /**
+   * An extracted block only hides the original glyphs once it is being edited or
+   * has already been changed. Everything else renders straight from the PDF.
+   */
+  const isActiveBlock = useCallback(
+    (annotation: TextAnnotation) =>
+      annotation.source === "added" ||
+      annotation.id === selectedId ||
+      isAnnotationModified(annotation),
+    [selectedId],
+  );
+
   const pageWhiteouts = useMemo(
-    () => getPageWhiteoutRects(annotations, pageIndex),
-    [
-      pageIndex,
-      annotations
-        .filter((annotation) => annotation.pageIndex === pageIndex && annotation.source === "extracted")
-        .map(
-          (annotation) =>
-            `${annotation.id}:${annotation.x}:${annotation.y}:${annotation.whiteout?.x}:${annotation.whiteout?.y}:${annotation.whiteout?.width}:${annotation.whiteout?.height}`,
-        )
-        .join("|"),
-    ],
+    () =>
+      pageAnnotations
+        .filter((a) => a.source === "extracted" && isActiveBlock(a))
+        .map((a) => ({
+          id: a.id,
+          rect: a.whiteout ?? createWhiteoutForAnnotation(a),
+        })) satisfies { id: string; rect: WhiteoutRect }[],
+    [isActiveBlock, pageAnnotations],
   );
 
   useEffect(() => {
@@ -230,7 +247,6 @@ export function PageInkEditor() {
           pageIndex,
           canvas: canvasRef.current!,
           scale: RENDER_SCALE,
-          whiteoutRegions: pageWhiteouts,
         });
         if (cancelled) {
           return;
@@ -250,7 +266,7 @@ export function PageInkEditor() {
     return () => {
       cancelled = true;
     };
-  }, [pageIndex, pageWhiteouts, pdfDoc]);
+  }, [pageIndex, pdfDoc]);
 
   useEffect(() => {
     function onKeyDown(e: globalThis.KeyboardEvent) {
@@ -606,35 +622,56 @@ export function PageInkEditor() {
                 onClick={onStageClick}
               >
                 <canvas ref={canvasRef} className="pageink-stage__canvas" />
-                {pageAnnotations.map((ann) => (
+                {pageWhiteouts.map(({ id, rect }) => (
                   <div
-                    key={ann.id}
-                    className={`pageink-annotation${
-                      selectedId === ann.id ? " pageink-annotation--selected" : ""
-                    }${ann.source === "extracted" ? " pageink-annotation--extracted" : ""}${
-                      ann.text !== ann.originalText ? " pageink-annotation--modified" : ""
-                    }`}
+                    key={`whiteout-${id}`}
+                    className="pageink-whiteout"
+                    aria-hidden
                     style={{
-                      left: `${ann.x * 100}%`,
-                      top: `${ann.y * 100}%`,
-                      fontSize: `${ann.fontSize * RENDER_SCALE * 0.72}px`,
-                      color: ann.color,
-                      fontWeight: ann.bold ? 700 : 400,
-                      fontFamily:
-                        ann.fontFamily === "times"
-                          ? "Times New Roman, serif"
-                          : ann.fontFamily === "courier"
-                            ? "Courier New, monospace"
-                            : "Helvetica, Arial, sans-serif",
+                      left: `${rect.x * 100}%`,
+                      top: `${rect.y * 100}%`,
+                      width: `${rect.width * 100}%`,
+                      height: `${rect.height * 100}%`,
                     }}
-                    onPointerDown={(e) => onAnnotationPointerDown(e, ann)}
-                    onPointerMove={onAnnotationPointerMove}
-                    onPointerUp={onAnnotationPointerUp}
-                    onDoubleClick={(e) => e.stopPropagation()}
-                  >
-                    {ann.text || PAGEINK_DEFAULT_TEXT}
-                  </div>
+                  />
                 ))}
+                {pageAnnotations.map((ann) => {
+                  const active = isActiveBlock(ann);
+                  return (
+                    <div
+                      key={ann.id}
+                      className={`pageink-annotation${
+                        selectedId === ann.id ? " pageink-annotation--selected" : ""
+                      }${ann.source === "extracted" ? " pageink-annotation--extracted" : ""}${
+                        isAnnotationModified(ann) && ann.source === "extracted"
+                          ? " pageink-annotation--modified"
+                          : ""
+                      }${active ? "" : " pageink-annotation--ghost"}`}
+                      title={active ? undefined : "Click to edit this text"}
+                      style={{
+                        left: `${ann.x * 100}%`,
+                        top: `${ann.y * 100}%`,
+                        minWidth: ann.width ? `${ann.width * 100}%` : undefined,
+                        minHeight: ann.height ? `${ann.height * 100}%` : undefined,
+                        fontSize: `${ann.fontSize * RENDER_SCALE * 0.72}px`,
+                        color: ann.color,
+                        fontWeight: ann.bold ? 700 : 400,
+                        fontFamily:
+                          ann.fontFamily === "times"
+                            ? "Times New Roman, serif"
+                            : ann.fontFamily === "courier"
+                              ? "Courier New, monospace"
+                              : "Helvetica, Arial, sans-serif",
+                      }}
+                      onPointerDown={(e) => onAnnotationPointerDown(e, ann)}
+                      onPointerMove={onAnnotationPointerMove}
+                      onPointerUp={onAnnotationPointerUp}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                    >
+                      {active ? ann.text || PAGEINK_DEFAULT_TEXT : null}
+                    </div>
+                  );
+                })}
               </div>
               <p className="pageink-stage__hint">
                 {fileName} · {pageAnnotations.length} on this page · {annotations.length} total

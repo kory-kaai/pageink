@@ -23,26 +23,33 @@ export function withUpdatedWhiteout(annotation: TextAnnotation): TextAnnotation 
   }
   return {
     ...annotation,
+    modified: true,
     whiteout: createWhiteoutForAnnotation(annotation),
   };
 }
 
-export function getWhiteoutRect(annotation: TextAnnotation): WhiteoutRect | null {
-  if (annotation.whiteout) {
-    return annotation.whiteout;
+/** Extracted text counts as modified once its content or placement changed. */
+export function isAnnotationModified(annotation: TextAnnotation): boolean {
+  if (annotation.source !== "extracted") {
+    return true;
   }
+  return annotation.modified === true || annotation.text !== annotation.originalText;
+}
+
+export function getWhiteoutRect(annotation: TextAnnotation): WhiteoutRect | null {
   if (annotation.source !== "extracted") {
     return null;
+  }
+  if (!isAnnotationModified(annotation)) {
+    return null;
+  }
+  if (annotation.whiteout) {
+    return annotation.whiteout;
   }
   if (annotation.width === undefined || annotation.height === undefined) {
     return null;
   }
-  return {
-    x: annotation.x,
-    y: annotation.y,
-    width: annotation.width,
-    height: annotation.height,
-  };
+  return createWhiteoutForAnnotation(annotation);
 }
 
 export function getPageWhiteoutRects(

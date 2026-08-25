@@ -2,7 +2,13 @@ export { clampNorm, hexToRgb } from "./coords.js";
 export { guessBold, guessFontFamily } from "./font-guess.js";
 export { newAnnotationId } from "./id.js";
 export { exportPdfWithAnnotations } from "./pdf-export.js";
-export { createWhiteoutForAnnotation, getPageWhiteoutRects, getWhiteoutRect, withUpdatedWhiteout } from "./whiteout.js";
+export {
+  createWhiteoutForAnnotation,
+  getPageWhiteoutRects,
+  getWhiteoutRect,
+  isAnnotationModified,
+  withUpdatedWhiteout,
+} from "./whiteout.js";
 export {
   PAGEINK_COLOR_PRESETS,
   PAGEINK_DEFAULT_COLOR,

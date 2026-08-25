@@ -369,9 +369,27 @@
   box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35);
 }
 
-.pageink-annotation--extracted:not(.pageink-annotation--selected):not(:hover) {
-  border-color: rgba(99, 102, 241, 0.28);
-  background: rgba(99, 102, 241, 0.05);
+/* Covers the original glyphs only while a block is being edited. */
+.pageink-whiteout {
+  position: absolute;
+  background: #ffffff;
+  pointer-events: none;
+}
+
+/*
+ * Untouched PDF text: an invisible hit target over the original rendering, so the
+ * page still looks exactly like the source file until the user clicks in.
+ */
+.pageink-annotation--ghost {
+  color: transparent;
+  border-color: transparent;
+  background: transparent;
+  cursor: text;
+}
+
+.pageink-annotation--ghost:hover {
+  border-color: rgba(99, 102, 241, 0.5);
+  background: rgba(99, 102, 241, 0.1);
 }
 
 .pageink-annotation--modified {

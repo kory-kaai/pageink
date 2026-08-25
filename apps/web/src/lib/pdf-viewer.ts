@@ -1,5 +1,4 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import type { WhiteoutRect } from "@korykaai/pageink-core";
 
 let workerConfigured = false;
 
@@ -32,7 +31,6 @@ export async function renderPdfPage(input: {
   pageIndex: number;
   canvas: HTMLCanvasElement;
   scale: number;
-  whiteoutRegions?: WhiteoutRect[];
 }): Promise<RenderedPage> {
   const page = await input.doc.getPage(input.pageIndex + 1);
   const viewport = page.getViewport({ scale: input.scale });
@@ -46,18 +44,6 @@ export async function renderPdfPage(input: {
   }
 
   await page.render({ canvasContext: ctx, viewport, canvas }).promise;
-
-  if (input.whiteoutRegions?.length) {
-    ctx.fillStyle = "#ffffff";
-    for (const region of input.whiteoutRegions) {
-      ctx.fillRect(
-        region.x * viewport.width,
-        region.y * viewport.height,
-        region.width * viewport.width,
-        region.height * viewport.height,
-      );
-    }
-  }
 
   const [, , pdfWidth, pdfHeight] = page.view;
   return {
