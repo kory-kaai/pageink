@@ -1,0 +1,7 @@
+Signature fonts are SIL Open Font License (OFL) faces from Google Fonts.
+
+- Great Vibes — https://fonts.google.com/specimen/Great+Vibes
+- Allura — https://fonts.google.com/specimen/Allura
+- Dancing Script — https://fonts.google.com/specimen/Dancing+Script
+- Satisfy — https://fonts.google.com/specimen/Satisfy
+- Pacifico — https://fonts.google.com/specimen/Pacifico

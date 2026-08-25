@@ -151,12 +151,14 @@ function buildWhiteout(
   normY: number,
   normW: number,
   normH: number,
+  text: string,
 ) {
   return createWhiteoutForAnnotation({
     x: normX,
     y: normY,
     width: normW,
     height: normH,
+    text,
   });
 }
 
@@ -216,7 +218,7 @@ export async function extractTextAnnotations(
         color: PAGEINK_DEFAULT_COLOR,
         fontFamily: guessFontFamily(item.fontRealName),
         bold: guessBold(item.fontRealName),
-        whiteout: buildWhiteout(normX, normY, normW, normH),
+        whiteout: buildWhiteout(normX, normY, normW, normH, item.str),
       });
     }
   }

@@ -1,5 +1,35 @@
 /* PageInk — in-browser PDF text editor */
 
+@font-face {
+  font-family: "PageInk Formal";
+  src: url("/fonts/signatures/GreatVibes-Regular.ttf") format("truetype");
+  font-display: block;
+}
+
+@font-face {
+  font-family: "PageInk Elegant";
+  src: url("/fonts/signatures/Allura-Regular.ttf") format("truetype");
+  font-display: block;
+}
+
+@font-face {
+  font-family: "PageInk Casual";
+  src: url("/fonts/signatures/DancingScript-Regular.ttf") format("truetype");
+  font-display: block;
+}
+
+@font-face {
+  font-family: "PageInk Friendly";
+  src: url("/fonts/signatures/Satisfy-Regular.ttf") format("truetype");
+  font-display: block;
+}
+
+@font-face {
+  font-family: "PageInk Bold Script";
+  src: url("/fonts/signatures/Pacifico-Regular.ttf") format("truetype");
+  font-display: block;
+}
+
 @keyframes pageink-rise {
   from {
     opacity: 0;
@@ -236,6 +266,8 @@
   background: rgba(0, 0, 0, 0.22);
   position: sticky;
   top: 1rem;
+  max-height: calc(100vh - 7rem);
+  overflow-y: auto;
 }
 
 .pageink-inspector__title {
@@ -276,8 +308,25 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(0, 0, 0, 0.35);
   color: #f8fafc;
+  -webkit-text-fill-color: #f8fafc;
+  caret-color: #f8fafc;
   font-size: 0.88rem;
   font-weight: 500;
+}
+
+.pageink-input::placeholder {
+  color: rgba(248, 250, 252, 0.4);
+  -webkit-text-fill-color: rgba(248, 250, 252, 0.4);
+}
+
+/* Chrome autofill paints black text; keep it readable on the dark inspector. */
+.pageink-input:-webkit-autofill,
+.pageink-input:-webkit-autofill:hover,
+.pageink-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f8fafc;
+  caret-color: #f8fafc;
+  box-shadow: 0 0 0 1000px #12141c inset;
+  transition: background-color 9999s ease-out;
 }
 
 /* Previews the block's own font and weight so formatting is visible while typing. */
@@ -286,6 +335,30 @@
   line-height: 1.4;
   resize: vertical;
   min-height: 3.25rem;
+}
+
+.pageink-input--sign {
+  font-size: 1.2rem;
+  font-weight: 400;
+  line-height: 1.5;
+  background: #f8f5ef;
+  color: #111827;
+  -webkit-text-fill-color: currentColor;
+  caret-color: currentColor;
+  border-color: rgba(15, 23, 42, 0.16);
+}
+
+.pageink-input--sign::placeholder {
+  color: rgba(15, 23, 42, 0.38);
+  -webkit-text-fill-color: rgba(15, 23, 42, 0.38);
+}
+
+.pageink-input.pageink-input--sign:-webkit-autofill,
+.pageink-input.pageink-input--sign:-webkit-autofill:hover,
+.pageink-input.pageink-input--sign:-webkit-autofill:focus {
+  -webkit-text-fill-color: #111827;
+  caret-color: #111827;
+  box-shadow: 0 0 0 1000px #f8f5ef inset;
 }
 
 .pageink-inspector__style {
@@ -396,6 +469,16 @@
   max-width: none;
   white-space: pre;
   border-color: transparent;
+  overflow: visible;
+}
+
+/*
+ * Once a block is drawn by us, keep descenders (g, y, p, q, j) inside the box
+ * so they are not mistaken for leftover original glyphs sitting under the outline.
+ * Ghosts stay tight so their hit target does not steal the next line.
+ */
+.pageink-annotation--extracted:not(.pageink-annotation--ghost) {
+  padding-bottom: 0.45em;
 }
 
 .pageink-annotation--extracted.pageink-annotation--selected {
@@ -437,6 +520,153 @@
 
 .pageink-annotation:active {
   cursor: grabbing;
+}
+
+.pageink-annotation--signature {
+  padding: 0 0 0.35em;
+  line-height: 1.15;
+  background: transparent;
+  border-color: transparent;
+  max-width: none;
+  white-space: nowrap;
+  overflow: visible;
+  font-synthesis: none;
+}
+
+.pageink-annotation--signature.pageink-annotation--selected {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: transparent;
+  box-shadow: none;
+  outline: 1px solid rgba(99, 102, 241, 0.9);
+  outline-offset: 4px;
+}
+
+.pageink-sign {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pageink-sign__preview {
+  display: grid;
+  place-items: center;
+  min-height: 4.5rem;
+  margin: 0 0 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background:
+    repeating-linear-gradient(
+      transparent,
+      transparent 22px,
+      rgba(99, 102, 241, 0.16) 22px,
+      rgba(99, 102, 241, 0.16) 23px
+    ),
+    #f8f5ef;
+  color-scheme: light;
+}
+
+.pageink-sign__preview-name {
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+  font-synthesis: none;
+}
+
+.pageink-sign__styles {
+  margin: 0 0 0.75rem;
+  padding: 0;
+  border: 0;
+}
+
+.pageink-sign__style-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.pageink-sign__style {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
+  min-width: 0;
+  width: 100%;
+  padding: 0.45rem 0.5rem 0.4rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.pageink-sign__style:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.pageink-sign__style--active {
+  border-color: rgba(99, 102, 241, 0.65);
+  background: rgba(99, 102, 241, 0.16);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35);
+}
+
+.pageink-sign__style-sample {
+  display: block;
+  font-size: 1.2rem;
+  line-height: 1.3;
+  color: #f8fafc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-synthesis: none;
+}
+
+.pageink-sign__style-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.55);
+}
+
+.pageink-sign__style--active .pageink-sign__style-label {
+  color: rgba(199, 210, 254, 0.95);
+}
+
+.pageink-sign__size-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.pageink-sign__size-value {
+  font-variant-numeric: tabular-nums;
+  color: rgba(199, 210, 254, 0.95);
+}
+
+.pageink-sign__size {
+  width: 100%;
+  accent-color: #818cf8;
+}
+
+.pageink-sign__place {
+  width: 100%;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.pageink-sign__hint {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: rgba(165, 180, 252, 0.85);
 }
 
 .pageink-stage__hint {

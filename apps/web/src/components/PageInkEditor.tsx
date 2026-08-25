@@ -16,29 +16,37 @@ import {
   PAGEINK_COLOR_PRESETS,
   PAGEINK_DEFAULT_COLOR,
   PAGEINK_DEFAULT_FONT_SIZE,
+  PAGEINK_DEFAULT_SIGNATURE_SIZE,
+  PAGEINK_DEFAULT_SIGNATURE_STYLE,
   PAGEINK_DEFAULT_TEXT,
   PAGEINK_FONT_OPTIONS,
+  PAGEINK_SIGNATURE_STYLES,
+  annotationsOnSameLine,
   clampNorm,
   exportPdfWithAnnotations,
-  createWhiteoutForAnnotation,
+  getWhiteoutRect,
   isAnnotationModified,
+  isSignatureAnnotation,
   newAnnotationId,
   withUpdatedWhiteout,
+  type PageInkSignatureStyle,
   type TextAnnotation,
   type WhiteoutRect,
 } from "@korykaai/pageink-core";
+import { SignatureComposer, type SignatureDraft } from "@/components/SignatureComposer";
 import { extractTextAnnotations, resolveExtractedFontStyles } from "@/lib/pdf-text-extract";
 import { isBenignRenderError, loadPdfDocument, renderPdfPage } from "@/lib/pdf-viewer";
+import { SIGNATURE_FONT_STACKS, loadSignatureFontBytes, preloadSignatureFonts } from "@/lib/signature-fonts";
 import { sampleTextColor } from "@/lib/text-color";
 
-type EditorMode = "select" | "add";
+type EditorMode = "select" | "add" | "sign";
 
 type DragState = {
   id: string;
   startX: number;
   startY: number;
-  originX: number;
-  originY: number;
+  /** Every run that shares this baseline — a signature rule travels with its label. */
+  origins: { id: string; x: number; y: number }[];
   /** Becomes true only once the pointer passes the drag threshold. */
   moved: boolean;
 };
@@ -58,9 +66,56 @@ const FONT_STACKS: Record<TextAnnotation["fontFamily"], string> = {
   helvetica: "Helvetica, Arial, sans-serif",
 };
 
+const SIGNATURE_STORAGE_KEY = "pageink.signature.v1";
+
+const DEFAULT_SIGNATURE_DRAFT: SignatureDraft = {
+  text: "",
+  style: PAGEINK_DEFAULT_SIGNATURE_STYLE,
+  fontSize: PAGEINK_DEFAULT_SIGNATURE_SIZE,
+  color: PAGEINK_DEFAULT_COLOR,
+};
+
 function describeStyle(ann: TextAnnotation): string {
+  if (isSignatureAnnotation(ann)) {
+    const style = PAGEINK_SIGNATURE_STYLES.find((item) => item.id === ann.signatureStyle);
+    return `${style?.label ?? "Signature"} · ${ann.fontSize}pt`;
+  }
   const label = PAGEINK_FONT_OPTIONS.find((f) => f.id === ann.fontFamily)?.label ?? ann.fontFamily;
   return `${label} · ${ann.bold ? "Bold" : "Regular"} · ${ann.fontSize}pt`;
+}
+
+function overlayFontFamily(ann: TextAnnotation): string {
+  if (isSignatureAnnotation(ann) && ann.signatureStyle) {
+    return SIGNATURE_FONT_STACKS[ann.signatureStyle];
+  }
+  return FONT_STACKS[ann.fontFamily];
+}
+
+function readStoredSignature(): SignatureDraft {
+  if (typeof window === "undefined") {
+    return DEFAULT_SIGNATURE_DRAFT;
+  }
+  try {
+    const raw = window.localStorage.getItem(SIGNATURE_STORAGE_KEY);
+    if (!raw) {
+      return DEFAULT_SIGNATURE_DRAFT;
+    }
+    const parsed = JSON.parse(raw) as Partial<SignatureDraft>;
+    const style = PAGEINK_SIGNATURE_STYLES.some((item) => item.id === parsed.style)
+      ? (parsed.style as PageInkSignatureStyle)
+      : DEFAULT_SIGNATURE_DRAFT.style;
+    return {
+      text: typeof parsed.text === "string" ? parsed.text : "",
+      style,
+      fontSize:
+        typeof parsed.fontSize === "number" && parsed.fontSize >= 16 && parsed.fontSize <= 64
+          ? parsed.fontSize
+          : DEFAULT_SIGNATURE_DRAFT.fontSize,
+      color: typeof parsed.color === "string" ? parsed.color : DEFAULT_SIGNATURE_DRAFT.color,
+    };
+  } catch {
+    return DEFAULT_SIGNATURE_DRAFT;
+  }
 }
 
 function downloadBytes(bytes: Uint8Array, fileName: string) {
@@ -90,6 +145,7 @@ export function PageInkEditor() {
   const [annotations, setAnnotations] = useState<TextAnnotation[]>([]);
   const [extractedCount, setExtractedCount] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [signatureDraft, setSignatureDraft] = useState<SignatureDraft>(readStoredSignature);
   const [history, setHistory] = useState<TextAnnotation[][]>([[]]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -104,6 +160,20 @@ export function PageInkEditor() {
     () => annotations.find((a) => a.id === selectedId) ?? null,
     [annotations, selectedId],
   );
+
+  const selectedSignature = selected && isSignatureAnnotation(selected) ? selected : null;
+
+  useEffect(() => {
+    preloadSignatureFonts();
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIGNATURE_STORAGE_KEY, JSON.stringify(signatureDraft));
+    } catch {
+      /* private mode or blocked storage — draft still works for this session */
+    }
+  }, [signatureDraft]);
 
   const pageAnnotations = useMemo(
     () => annotations.filter((a) => a.pageIndex === pageIndex),
@@ -134,6 +204,40 @@ export function PageInkEditor() {
       );
     },
     [annotations, commitAnnotations],
+  );
+
+  const placeSignatureAt = useCallback(
+    (x: number, y: number) => {
+      const text = signatureDraft.text.trim();
+      if (!text) {
+        setStatus("Type a name to create your signature.");
+        return;
+      }
+      const ann: TextAnnotation = {
+        id: newAnnotationId(),
+        pageIndex,
+        source: "added",
+        kind: "signature",
+        signatureStyle: signatureDraft.style,
+        x,
+        y,
+        text,
+        fontSize: signatureDraft.fontSize,
+        color: signatureDraft.color,
+        fontFamily: "helvetica",
+        bold: false,
+      };
+      commitAnnotations([...annotations, ann]);
+      setSelectedId(ann.id);
+      setMode("select");
+      setStatus("Signature placed — drag it into position.");
+      window.setTimeout(() => {
+        document
+          .querySelector(".pageink-annotation--signature.pageink-annotation--selected")
+          ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+      }, 0);
+    },
+    [annotations, commitAnnotations, pageIndex, signatureDraft],
   );
 
   const deleteAnnotation = useCallback(
@@ -347,10 +451,11 @@ export function PageInkEditor() {
     () =>
       pageAnnotations
         .filter((a) => a.source === "extracted" && isActiveBlock(a))
-        .map((a) => ({
-          id: a.id,
-          rect: a.whiteout ?? createWhiteoutForAnnotation(a),
-        })) satisfies { id: string; rect: WhiteoutRect }[],
+        .map((a) => {
+          const rect = getWhiteoutRect(a);
+          return rect ? { id: a.id, rect } : null;
+        })
+        .filter((entry): entry is { id: string; rect: WhiteoutRect } => entry !== null),
     [isActiveBlock, pageAnnotations],
   );
 
@@ -448,6 +553,14 @@ export function PageInkEditor() {
       return;
     }
     const onAnnotation = (e.target as HTMLElement).closest(".pageink-annotation");
+    if (mode === "sign") {
+      if (onAnnotation) {
+        return;
+      }
+      const { x, y } = pointerToNorm(e);
+      placeSignatureAt(x, y);
+      return;
+    }
     if (mode !== "add") {
       // Clicking empty page area clears the current selection box.
       if (!onAnnotation) {
@@ -464,6 +577,7 @@ export function PageInkEditor() {
       id: newAnnotationId(),
       pageIndex,
       source: "added",
+      kind: "text",
       x,
       y,
       text: PAGEINK_DEFAULT_TEXT,
@@ -481,13 +595,21 @@ export function PageInkEditor() {
     e.stopPropagation();
     setSelectedId(ann.id);
     setMode("select");
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // Capture is an optimisation for tracking the pointer outside the block;
+      // without it dragging still works, so never let it break selection.
+    }
     setDrag({
       id: ann.id,
       startX: e.clientX,
       startY: e.clientY,
-      originX: ann.x,
-      originY: ann.y,
+      origins: annotationsOnSameLine(ann, annotationsRef.current).map((block) => ({
+        id: block.id,
+        x: block.x,
+        y: block.y,
+      })),
       moved: false,
     });
   }
@@ -513,15 +635,17 @@ export function PageInkEditor() {
     const rect = stage.getBoundingClientRect();
     const dx = pxDx / rect.width;
     const dy = pxDy / rect.height;
+    const origins = new Map(drag.origins.map((origin) => [origin.id, origin]));
     setAnnotations((prev) =>
       prev.map((a) => {
-        if (a.id !== drag.id) {
+        const origin = origins.get(a.id);
+        if (!origin) {
           return a;
         }
         const moved = {
           ...a,
-          x: clampNorm(drag.originX + dx),
-          y: clampNorm(drag.originY + dy),
+          x: clampNorm(origin.x + dx),
+          y: clampNorm(origin.y + dy),
         };
         return a.source === "extracted" ? withUpdatedWhiteout(moved) : moved;
       }),
@@ -551,10 +675,17 @@ export function PageInkEditor() {
     setExporting(true);
     setStatus("Preparing download…");
     try {
-      const out = await exportPdfWithAnnotations({ pdfBytes, annotations });
+      const signatureStyles = annotations
+        .filter(isSignatureAnnotation)
+        .map((ann) => ann.signatureStyle)
+        .filter((style): style is PageInkSignatureStyle => style !== undefined);
+      const customFonts =
+        signatureStyles.length > 0 ? await loadSignatureFontBytes(signatureStyles) : undefined;
+      const out = await exportPdfWithAnnotations({ pdfBytes, annotations, customFonts });
       downloadBytes(out, fileName);
       setStatus("Download started — your file never left this browser.");
-    } catch {
+    } catch (error) {
+      console.error("PageInk export failed", error);
       setStatus("Export failed. Try again or use a smaller PDF.");
     } finally {
       setExporting(false);
@@ -605,6 +736,16 @@ export function PageInkEditor() {
                 onClick={() => setMode("add")}
               >
                 + Add text
+              </button>
+              <button
+                type="button"
+                className={`pageink-tool${mode === "sign" ? " pageink-tool--active" : ""}`}
+                onClick={() => {
+                  setSelectedId(null);
+                  setMode("sign");
+                }}
+              >
+                Sign
               </button>
               <button
                 type="button"
@@ -660,7 +801,50 @@ export function PageInkEditor() {
 
           <div className="pageink-workspace">
             <aside className="pageink-inspector" aria-label="Text properties">
-              {selected ? (
+              {selectedSignature ? (
+                <>
+                  <h2 className="pageink-inspector__title">Signature</h2>
+                  <p className="pageink-inspector__style">{describeStyle(selectedSignature)}</p>
+                  <SignatureComposer
+                    value={{
+                      text: selectedSignature.text,
+                      style: selectedSignature.signatureStyle ?? PAGEINK_DEFAULT_SIGNATURE_STYLE,
+                      fontSize: selectedSignature.fontSize,
+                      color: selectedSignature.color,
+                    }}
+                    onChange={(patch) => {
+                      setSignatureDraft((prev) => ({ ...prev, ...patch }));
+                      updateAnnotation(selectedSignature.id, {
+                        ...(patch.text !== undefined ? { text: patch.text } : {}),
+                        ...(patch.style !== undefined ? { signatureStyle: patch.style } : {}),
+                        ...(patch.fontSize !== undefined ? { fontSize: patch.fontSize } : {}),
+                        ...(patch.color !== undefined ? { color: patch.color } : {}),
+                      });
+                    }}
+                    hint="Drag the signature anywhere on the page."
+                  />
+                  <button
+                    type="button"
+                    className="pageink-tool pageink-tool--danger"
+                    onClick={() => deleteAnnotation(selectedSignature.id)}
+                  >
+                    Delete signature
+                  </button>
+                </>
+              ) : mode === "sign" ? (
+                <>
+                  <h2 className="pageink-inspector__title">Signature</h2>
+                  <p className="pageink-inspector__style">Type a name, pick a style, place it.</p>
+                  <SignatureComposer
+                    value={signatureDraft}
+                    onChange={(patch) => setSignatureDraft((prev) => ({ ...prev, ...patch }))}
+                    onPlace={() => placeSignatureAt(0.16, 0.62)}
+                    placeDisabled={!signatureDraft.text.trim()}
+                    placeLabel="Place on page"
+                    hint="Or click anywhere on the page to drop it."
+                  />
+                </>
+              ) : selected ? (
                 <>
                   <h2 className="pageink-inspector__title">
                     {selected.source === "extracted" ? "PDF text" : "Added text"}
@@ -673,8 +857,7 @@ export function PageInkEditor() {
                       rows={2}
                       value={selected.text}
                       style={{
-                        // Mirror the block's own formatting so bold and font are obvious here too.
-                        fontFamily: FONT_STACKS[selected.fontFamily],
+                        fontFamily: overlayFontFamily(selected),
                         fontWeight: selected.bold ? 700 : 400,
                       }}
                       onChange={(e) => updateAnnotation(selected.id, { text: e.target.value })}
@@ -756,7 +939,7 @@ export function PageInkEditor() {
                   {mode === "add"
                     ? "Click anywhere on the page to place new text."
                     : extractedCount > 0
-                      ? "Click existing text on the page to edit it, or use + Add text for new blocks."
+                      ? "Click existing text on the page to edit it, or use Sign to add a signature."
                       : "Select a text block to edit font, size, and color."}
                 </p>
               )}
@@ -766,7 +949,7 @@ export function PageInkEditor() {
               {rendering ? <p className="pageink-stage__loading">Rendering page…</p> : null}
               <div
                 ref={stageRef}
-                className={`pageink-stage${mode === "add" ? " pageink-stage--add" : ""}`}
+                className={`pageink-stage${mode === "add" || mode === "sign" ? " pageink-stage--add" : ""}`}
                 style={
                   stageSize.width
                     ? { width: stageSize.width, height: stageSize.height }
@@ -796,21 +979,26 @@ export function PageInkEditor() {
                       className={`pageink-annotation${
                         selectedId === ann.id ? " pageink-annotation--selected" : ""
                       }${ann.source === "extracted" ? " pageink-annotation--extracted" : ""}${
+                        isSignatureAnnotation(ann) ? " pageink-annotation--signature" : ""
+                      }${
                         isAnnotationModified(ann) && ann.source === "extracted"
                           ? " pageink-annotation--modified"
                           : ""
                       }${active ? "" : " pageink-annotation--ghost"}`}
+                      role={isSignatureAnnotation(ann) ? "img" : undefined}
+                      aria-label={
+                        isSignatureAnnotation(ann) ? `Signature ${ann.text}` : undefined
+                      }
                       title={active ? undefined : "Click to edit this text"}
                       style={{
                         left: `${ann.x * 100}%`,
                         top: `${ann.y * 100}%`,
                         minWidth: ann.width ? `${ann.width * 100}%` : undefined,
                         minHeight: ann.height ? `${ann.height * 100}%` : undefined,
-                        // Extracted sizes are page units, so they scale 1:1 with the canvas.
                         fontSize: `${ann.fontSize * RENDER_SCALE}px`,
                         color: ann.color,
-                        fontWeight: ann.bold ? 700 : 400,
-                        fontFamily: FONT_STACKS[ann.fontFamily],
+                        fontWeight: isSignatureAnnotation(ann) ? 400 : ann.bold ? 700 : 400,
+                        fontFamily: overlayFontFamily(ann),
                       }}
                       onPointerDown={(e) => onAnnotationPointerDown(e, ann)}
                       onPointerMove={onAnnotationPointerMove}

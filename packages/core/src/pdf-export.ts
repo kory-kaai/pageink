@@ -1,7 +1,31 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import * as fontkitModule from "@pdf-lib/fontkit";
 import { hexToRgb } from "./coords.js";
+import { isSignatureAnnotation } from "./types.js";
 import { getWhiteoutRect, isAnnotationModified } from "./whiteout.js";
-import type { PageInkFontFamily, TextAnnotation } from "./types.js";
+import type { PageInkFontFamily, PageInkSignatureStyle, TextAnnotation } from "./types.js";
+
+type PdfFontkit = Parameters<PDFDocument["registerFontkit"]>[0];
+
+function hasCreate(value: unknown): value is PdfFontkit {
+  return typeof value === "object" && value !== null && typeof (value as { create?: unknown }).create === "function";
+}
+
+/**
+ * @pdf-lib/fontkit is a default export at runtime, but webpack/Node interop
+ * sometimes unwraps it. Accept either shape so signature embedding works in
+ * the browser and in tests.
+ */
+function resolveFontkit(): PdfFontkit {
+  if (hasCreate(fontkitModule)) {
+    return fontkitModule;
+  }
+  const nested = (fontkitModule as { default?: unknown }).default;
+  if (hasCreate(nested)) {
+    return nested;
+  }
+  throw new Error("Could not load fontkit for signature fonts");
+}
 
 function standardFont(family: PageInkFontFamily, bold: boolean) {
   switch (family) {
@@ -41,12 +65,18 @@ function drawWhiteout(
 export async function exportPdfWithAnnotations(input: {
   pdfBytes: Uint8Array;
   annotations: TextAnnotation[];
+  /** TrueType bytes for typed signatures, keyed by style id. */
+  customFonts?: Partial<Record<PageInkSignatureStyle, Uint8Array>>;
 }): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.load(input.pdfBytes);
+  const needsCustomFonts = input.annotations.some(isSignatureAnnotation);
+  if (needsCustomFonts) {
+    pdfDoc.registerFontkit(resolveFontkit());
+  }
   const pages = pdfDoc.getPages();
   const fontCache = new Map<string, Awaited<ReturnType<typeof pdfDoc.embedFont>>>();
 
-  async function getFont(family: PageInkFontFamily, bold: boolean) {
+  async function getStandardFont(family: PageInkFontFamily, bold: boolean) {
     const key = `${family}-${bold}`;
     const cached = fontCache.get(key);
     if (cached) {
@@ -55,6 +85,29 @@ export async function exportPdfWithAnnotations(input: {
     const font = await pdfDoc.embedFont(standardFont(family, bold));
     fontCache.set(key, font);
     return font;
+  }
+
+  async function getSignatureFont(style: PageInkSignatureStyle) {
+    const key = `signature-${style}`;
+    const cached = fontCache.get(key);
+    if (cached) {
+      return cached;
+    }
+    const bytes = input.customFonts?.[style];
+    if (!bytes) {
+      throw new Error(`Missing signature font: ${style}`);
+    }
+    // Subsetting uses Node streams inside fontkit and fails in the browser.
+    const font = await pdfDoc.embedFont(bytes, { subset: false });
+    fontCache.set(key, font);
+    return font;
+  }
+
+  async function fontFor(annotation: TextAnnotation) {
+    if (isSignatureAnnotation(annotation)) {
+      return getSignatureFont(annotation.signatureStyle ?? "formal");
+    }
+    return getStandardFont(annotation.fontFamily, annotation.bold);
   }
 
   for (const ann of input.annotations) {
@@ -78,7 +131,7 @@ export async function exportPdfWithAnnotations(input: {
     }
 
     const { width, height } = page.getSize();
-    const font = await getFont(ann.fontFamily, ann.bold);
+    const font = await fontFor(ann);
     const { r, g, b } = hexToRgb(ann.color);
     const x = ann.x * width;
     // Annotation y is the top of the em box, but drawText positions the baseline.

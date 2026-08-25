@@ -1,6 +1,10 @@
 export type PageInkFontFamily = "helvetica" | "times" | "courier";
 
+export type PageInkSignatureStyle = "formal" | "elegant" | "casual" | "friendly" | "bold-script";
+
 export type AnnotationSource = "extracted" | "added";
+
+export type AnnotationKind = "text" | "signature";
 
 /** Normalized 0–1 rectangle used to cover original PDF glyphs. */
 export type WhiteoutRect = {
@@ -23,6 +27,10 @@ export type TextAnnotation = {
   fontFamily: PageInkFontFamily;
   bold: boolean;
   source: AnnotationSource;
+  /** Distinguishes typed signatures from ordinary overlay text. */
+  kind?: AnnotationKind;
+  /** Script face used when kind is signature. */
+  signatureStyle?: PageInkSignatureStyle;
   /** Original PDF text when source is extracted. */
   originalText?: string;
   /**
@@ -52,11 +60,25 @@ export type PageInkEditorState = {
 export const PAGEINK_DEFAULT_FONT_SIZE = 14;
 export const PAGEINK_DEFAULT_COLOR = "#111827";
 export const PAGEINK_DEFAULT_TEXT = "Text";
+export const PAGEINK_DEFAULT_SIGNATURE_STYLE: PageInkSignatureStyle = "formal";
+export const PAGEINK_DEFAULT_SIGNATURE_SIZE = 28;
 
 export const PAGEINK_FONT_OPTIONS: { id: PageInkFontFamily; label: string }[] = [
   { id: "helvetica", label: "Helvetica" },
   { id: "times", label: "Times" },
   { id: "courier", label: "Courier" },
+];
+
+export const PAGEINK_SIGNATURE_STYLES: {
+  id: PageInkSignatureStyle;
+  label: string;
+  description: string;
+}[] = [
+  { id: "formal", label: "Formal", description: "Classic pointed script" },
+  { id: "elegant", label: "Elegant", description: "Fine calligraphy" },
+  { id: "casual", label: "Casual", description: "Everyday handwriting" },
+  { id: "friendly", label: "Friendly", description: "Warm rounded script" },
+  { id: "bold-script", label: "Bold", description: "Heavy brush script" },
 ];
 
 export const PAGEINK_COLOR_PRESETS = [
@@ -67,3 +89,7 @@ export const PAGEINK_COLOR_PRESETS = [
   "#7c3aed",
   "#ffffff",
 ] as const;
+
+export function isSignatureAnnotation(annotation: Pick<TextAnnotation, "kind">): boolean {
+  return annotation.kind === "signature";
+}
