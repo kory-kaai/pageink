@@ -39,9 +39,18 @@ type DragState = {
   startY: number;
   originX: number;
   originY: number;
+  /** Becomes true only once the pointer passes the drag threshold. */
+  moved: boolean;
 };
 
 const RENDER_SCALE = 1.35;
+
+/**
+ * A click always jitters a pixel or two between pointerdown and pointerup.
+ * Movement below this (in px) counts as a click that selects but does not move —
+ * so extracted text is not flagged "modified" (and whited out) just by clicking it.
+ */
+const DRAG_THRESHOLD_PX = 3;
 
 const FONT_STACKS: Record<TextAnnotation["fontFamily"], string> = {
   times: "Times New Roman, serif",
@@ -418,6 +427,7 @@ export function PageInkEditor() {
       startY: e.clientY,
       originX: ann.x,
       originY: ann.y,
+      moved: false,
     });
   }
 
@@ -429,9 +439,19 @@ export function PageInkEditor() {
     if (!stage || stageSize.width === 0) {
       return;
     }
+    const pxDx = e.clientX - drag.startX;
+    const pxDy = e.clientY - drag.startY;
+    // Below the threshold this is a click, not a drag — leave the block untouched.
+    if (!drag.moved && Math.hypot(pxDx, pxDy) < DRAG_THRESHOLD_PX) {
+      return;
+    }
+    if (!drag.moved) {
+      setDrag({ ...drag, moved: true });
+    }
+
     const rect = stage.getBoundingClientRect();
-    const dx = (e.clientX - drag.startX) / rect.width;
-    const dy = (e.clientY - drag.startY) / rect.height;
+    const dx = pxDx / rect.width;
+    const dy = pxDy / rect.height;
     setAnnotations((prev) =>
       prev.map((a) => {
         if (a.id !== drag.id) {
@@ -456,7 +476,10 @@ export function PageInkEditor() {
     } catch {
       /* pointer already released */
     }
-    commitAnnotations([...annotationsRef.current]);
+    // Only record history if the block actually moved; a plain click is not an edit.
+    if (drag.moved) {
+      commitAnnotations([...annotationsRef.current]);
+    }
     setDrag(null);
   }
 
