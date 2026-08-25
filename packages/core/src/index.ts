@@ -1,27 +1,13 @@
+export { clampNorm, hexToRgb } from "./coords.js";
+export { newAnnotationId } from "./id.js";
+export { exportPdfWithAnnotations } from "./pdf-export.js";
 export {
-  createTextBlock,
-  createTextBlockId,
-  duplicateTextBlock,
-  mergeTextBlockStyle,
-  removeTextBlock,
-  resetTextBlockIdCounter,
-  updateTextBlock,
-} from "./text-block.js";
-export { exportPdfWithText, getPdfPageCount } from "./export-pdf.js";
-export {
-  canvasYToPdfY,
-  clamp,
-  hexToRgb,
-  pdfYToCanvasY,
-  snapToGrid,
-} from "./geometry.js";
-export { UndoStack } from "./undo-stack.js";
-export {
-  DEFAULT_TEXT_STYLE,
-  FONT_FAMILIES,
-  PRESET_COLORS,
-  type PageinkDocument,
-  type PdfFontFamily,
-  type TextBlock,
-  type TextBlockStyle,
+  PAGEINK_COLOR_PRESETS,
+  PAGEINK_DEFAULT_COLOR,
+  PAGEINK_DEFAULT_FONT_SIZE,
+  PAGEINK_DEFAULT_TEXT,
+  PAGEINK_FONT_OPTIONS,
+  type PageInkEditorState,
+  type PageInkFontFamily,
+  type TextAnnotation,
 } from "./types.js";

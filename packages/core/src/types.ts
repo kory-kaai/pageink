@@ -1,45 +1,38 @@
-export type PdfFontFamily = "Helvetica" | "TimesRoman" | "Courier";
+export type PageInkFontFamily = "helvetica" | "times" | "courier";
 
-export interface TextBlockStyle {
-  fontFamily: PdfFontFamily;
-  fontSize: number;
-  color: string;
-  bold: boolean;
-}
-
-export interface TextBlock {
+export type TextAnnotation = {
   id: string;
   pageIndex: number;
+  /** 0–1 from left edge of page */
   x: number;
+  /** 0–1 from top edge of page */
   y: number;
-  width: number;
-  height: number;
   text: string;
-  style: TextBlockStyle;
-}
-
-export interface PageinkDocument {
-  blocks: TextBlock[];
-}
-
-export const DEFAULT_TEXT_STYLE: TextBlockStyle = {
-  fontFamily: "Helvetica",
-  fontSize: 14,
-  color: "#111827",
-  bold: false,
+  fontSize: number;
+  color: string;
+  fontFamily: PageInkFontFamily;
+  bold: boolean;
 };
 
-export const FONT_FAMILIES: readonly PdfFontFamily[] = [
-  "Helvetica",
-  "TimesRoman",
-  "Courier",
-] as const;
+export type PageInkEditorState = {
+  annotations: TextAnnotation[];
+};
 
-export const PRESET_COLORS = [
+export const PAGEINK_DEFAULT_FONT_SIZE = 14;
+export const PAGEINK_DEFAULT_COLOR = "#111827";
+export const PAGEINK_DEFAULT_TEXT = "Text";
+
+export const PAGEINK_FONT_OPTIONS: { id: PageInkFontFamily; label: string }[] = [
+  { id: "helvetica", label: "Helvetica" },
+  { id: "times", label: "Times" },
+  { id: "courier", label: "Courier" },
+];
+
+export const PAGEINK_COLOR_PRESETS = [
   "#111827",
+  "#006039",
   "#1d4ed8",
-  "#dc2626",
-  "#15803d",
+  "#b91c1c",
   "#7c3aed",
   "#ffffff",
 ] as const;

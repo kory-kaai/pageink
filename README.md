@@ -41,8 +41,8 @@ Everything runs in the browser. Files never leave the device.
 
 | Package | Purpose |
 | --- | --- |
-| [`@korykaai/pageink-core`](packages/core) | PDF export, text blocks, undo stack |
-| [`@korykaai/pageink-web`](apps/web) | Next.js demo app |
+| [`@korykaai/pageink-core`](packages/core) | Annotation types, coords, PDF export via pdf-lib |
+| [`@korykaai/pageink-web`](apps/web) | Next.js demo app (matches korykaai.com/tools/pdf) |
 
 ## Quick start
 
