@@ -1,19 +1,28 @@
 import type { TextAnnotation, WhiteoutRect } from "./types.js";
 
-const WHITEOUT_PAD_X = 0.008;
-const WHITEOUT_PAD_Y = 0.006;
+/**
+ * Just enough bleed to swallow anti-aliased glyph edges. Kept tight, and scaled
+ * to the block's own height rather than the page, so covering one run never
+ * erases the neighbouring run on the same line.
+ */
+const WHITEOUT_BLEED_X = 0.0015;
+const WHITEOUT_BLEED_Y_RATIO = 0.16;
 
 export function createWhiteoutForAnnotation(
   annotation: Pick<TextAnnotation, "x" | "y" | "width" | "height">,
 ): WhiteoutRect {
   const width = annotation.width ?? 0.2;
   const height = annotation.height ?? 0.03;
+  const padY = height * WHITEOUT_BLEED_Y_RATIO;
+
+  const x = Math.max(0, annotation.x - WHITEOUT_BLEED_X);
+  const y = Math.max(0, annotation.y - padY);
 
   return {
-    x: Math.max(0, annotation.x - WHITEOUT_PAD_X),
-    y: Math.max(0, annotation.y - WHITEOUT_PAD_Y),
-    width: Math.min(1 - Math.max(0, annotation.x - WHITEOUT_PAD_X), width + WHITEOUT_PAD_X * 2),
-    height: Math.min(1 - Math.max(0, annotation.y - WHITEOUT_PAD_Y), height + WHITEOUT_PAD_Y * 2),
+    x,
+    y,
+    width: Math.min(1 - x, width + WHITEOUT_BLEED_X * 2),
+    height: Math.min(1 - y, height + padY * 2),
   };
 }
 

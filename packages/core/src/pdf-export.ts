@@ -81,7 +81,9 @@ export async function exportPdfWithAnnotations(input: {
     const font = await getFont(ann.fontFamily, ann.bold);
     const { r, g, b } = hexToRgb(ann.color);
     const x = ann.x * width;
-    const y = height - ann.y * height - ann.fontSize;
+    // Annotation y is the top of the em box, but drawText positions the baseline.
+    const ascent = font.heightAtSize(ann.fontSize, { descender: false });
+    const y = height - ann.y * height - ascent;
 
     page.drawText(ann.text, {
       x,

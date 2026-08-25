@@ -19,11 +19,12 @@ type RawTextItem = {
   fontName: string;
 };
 
-function mergeLineItems(items: RawTextItem[]): RawTextItem[] {
-  if (items.length === 0) {
-    return [];
-  }
+/** Widest horizontal gap, relative to font size, still treated as one run. */
+const RUN_GAP_RATIO = 0.4;
+/** Gap wide enough to imply a space character that carries no glyph. */
+const SPACE_GAP_RATIO = 0.12;
 
+function groupIntoLines(items: RawTextItem[]): RawTextItem[][] {
   const sorted = [...items].sort((a, b) => a.y - b.y || a.x - b.x);
   const lines: RawTextItem[][] = [];
 
@@ -38,30 +39,81 @@ function mergeLineItems(items: RawTextItem[]): RawTextItem[] {
     }
   }
 
-  return lines
-    .map((line) => {
-      line.sort((a, b) => a.x - b.x);
-      const first = line[0];
-      const last = line[line.length - 1];
-      if (!first || !last) {
-        return null;
-      }
+  return lines;
+}
 
-      return {
-        str: line
-          .map((part) => part.str)
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim(),
-        x: first.x,
-        y: Math.min(...line.map((part) => part.y)),
-        width: last.x + last.width - first.x,
-        height: Math.max(...line.map((part) => part.height)),
-        fontSize: first.fontSize,
-        fontName: first.fontName,
-      } satisfies RawTextItem;
-    })
-    .filter((item): item is RawTextItem => item !== null && item.str.length > 0);
+/**
+ * A block is only editable as a unit if every glyph in it shares one style, so a
+ * line is split wherever the font, the size, or the spacing changes. This keeps
+ * a bold label and the regular value beside it as separate, individually
+ * clickable blocks instead of collapsing both into the label's formatting.
+ */
+function splitLineIntoRuns(line: RawTextItem[]): RawTextItem[] {
+  const sorted = [...line].sort((a, b) => a.x - b.x);
+  const runs: RawTextItem[][] = [];
+  let current: RawTextItem[] = [];
+
+  for (const item of sorted) {
+    const prev = current[current.length - 1];
+    const startsNewRun =
+      prev !== undefined &&
+      (item.fontName !== prev.fontName ||
+        Math.abs(item.fontSize - prev.fontSize) > 0.6 ||
+        item.x - (prev.x + prev.width) > prev.fontSize * RUN_GAP_RATIO);
+
+    if (startsNewRun) {
+      runs.push(current);
+      current = [];
+    }
+    current.push(item);
+  }
+
+  if (current.length > 0) {
+    runs.push(current);
+  }
+
+  return runs
+    .map(joinRun)
+    .filter((item): item is RawTextItem => item !== null);
+}
+
+function joinRun(run: RawTextItem[]): RawTextItem | null {
+  const first = run[0];
+  const last = run[run.length - 1];
+  if (!first || !last) {
+    return null;
+  }
+
+  let str = first.str;
+  for (let i = 1; i < run.length; i += 1) {
+    const prev = run[i - 1];
+    const item = run[i];
+    const gap = item.x - (prev.x + prev.width);
+    const needsSpace =
+      gap > prev.fontSize * SPACE_GAP_RATIO &&
+      !/\s$/.test(str) &&
+      !/^\s/.test(item.str);
+    str += needsSpace ? ` ${item.str}` : item.str;
+  }
+
+  str = str.replace(/\s+/g, " ").trim();
+  if (str.length === 0) {
+    return null;
+  }
+
+  return {
+    str,
+    x: first.x,
+    y: Math.min(...run.map((part) => part.y)),
+    width: last.x + last.width - first.x,
+    height: Math.max(...run.map((part) => part.height)),
+    fontSize: first.fontSize,
+    fontName: first.fontName,
+  } satisfies RawTextItem;
+}
+
+function extractRuns(items: RawTextItem[]): RawTextItem[] {
+  return groupIntoLines(items).flatMap(splitLineIntoRuns);
 }
 
 function buildWhiteout(
@@ -111,7 +163,7 @@ export async function extractTextAnnotations(
       });
     }
 
-    for (const item of mergeLineItems(rawItems)) {
+    for (const item of extractRuns(rawItems)) {
       const normX = clampNorm(item.x / viewport.width);
       const normY = clampNorm(item.y / viewport.height);
       const normW = clampNorm(item.width / viewport.width);

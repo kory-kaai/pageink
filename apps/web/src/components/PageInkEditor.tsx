@@ -29,6 +29,7 @@ import {
 } from "@korykaai/pageink-core";
 import { extractTextAnnotations } from "@/lib/pdf-text-extract";
 import { loadPdfDocument, renderPdfPage } from "@/lib/pdf-viewer";
+import { sampleTextColor } from "@/lib/text-color";
 
 type EditorMode = "select" | "add";
 
@@ -41,6 +42,17 @@ type DragState = {
 };
 
 const RENDER_SCALE = 1.35;
+
+const FONT_STACKS: Record<TextAnnotation["fontFamily"], string> = {
+  times: "Times New Roman, serif",
+  courier: "Courier New, monospace",
+  helvetica: "Helvetica, Arial, sans-serif",
+};
+
+function describeStyle(ann: TextAnnotation): string {
+  const label = PAGEINK_FONT_OPTIONS.find((f) => f.id === ann.fontFamily)?.label ?? ann.fontFamily;
+  return `${label} · ${ann.bold ? "Bold" : "Regular"} · ${ann.fontSize}pt`;
+}
 
 function downloadBytes(bytes: Uint8Array, fileName: string) {
   const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
@@ -74,6 +86,7 @@ export function PageInkEditor() {
   const [drag, setDrag] = useState<DragState | null>(null);
   const annotationsRef = useRef(annotations);
   annotationsRef.current = annotations;
+  const sampledPagesRef = useRef<Set<number>>(new Set());
 
   const selected = useMemo(
     () => annotations.find((a) => a.id === selectedId) ?? null,
@@ -165,6 +178,53 @@ export function PageInkEditor() {
     setSelectedId(null);
     setStatus(null);
     setExtractedCount(0);
+    sampledPagesRef.current = new Set();
+  }, []);
+
+  /**
+   * Recover each block's real ink color from the rendered page. This corrects the
+   * placeholder color assigned during extraction, so a block keeps its own color
+   * the moment it is selected instead of snapping to the default.
+   */
+  const sampleColorsForPage = useCallback((page: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas || sampledPagesRef.current.has(page)) {
+      return;
+    }
+    sampledPagesRef.current.add(page);
+
+    const colors = new Map<string, string>();
+    for (const ann of annotationsRef.current) {
+      if (ann.pageIndex !== page || ann.source !== "extracted") {
+        continue;
+      }
+      if (ann.width === undefined || ann.height === undefined) {
+        continue;
+      }
+      const color = sampleTextColor(canvas, {
+        x: ann.x,
+        y: ann.y,
+        width: ann.width,
+        height: ann.height,
+      });
+      if (color && color !== ann.color) {
+        colors.set(ann.id, color);
+      }
+    }
+
+    if (colors.size === 0) {
+      return;
+    }
+
+    const applyColors = (list: TextAnnotation[]) =>
+      list.map((a) => {
+        const color = colors.get(a.id);
+        return color ? { ...a, color } : a;
+      });
+
+    // Reading back the original color is not an edit, so it stays out of undo history.
+    setAnnotations(applyColors);
+    setHistory((prev) => prev.map(applyColors));
   }, []);
 
   const loadFile = useCallback(async (file: File) => {
@@ -186,6 +246,7 @@ export function PageInkEditor() {
       setPageCount(doc.numPages);
       setPageIndex(0);
       setSelectedId(null);
+      sampledPagesRef.current = new Set();
 
       setStatus("Extracting existing text…");
       const extracted = await extractTextAnnotations(doc);
@@ -252,6 +313,7 @@ export function PageInkEditor() {
           return;
         }
         setStageSize({ width: rendered.cssWidth, height: rendered.cssHeight });
+        sampleColorsForPage(pageIndex);
       } catch {
         if (!cancelled) {
           setStatus("Could not render this page.");
@@ -266,7 +328,7 @@ export function PageInkEditor() {
     return () => {
       cancelled = true;
     };
-  }, [pageIndex, pdfDoc]);
+  }, [pageIndex, pdfDoc, sampleColorsForPage]);
 
   useEffect(() => {
     function onKeyDown(e: globalThis.KeyboardEvent) {
@@ -519,11 +581,18 @@ export function PageInkEditor() {
                   <h2 className="pageink-inspector__title">
                     {selected.source === "extracted" ? "PDF text" : "Added text"}
                   </h2>
+                  <p className="pageink-inspector__style">{describeStyle(selected)}</p>
                   <label className="pageink-field">
                     Content
-                    <input
-                      className="pageink-input"
+                    <textarea
+                      className="pageink-input pageink-input--content"
+                      rows={2}
                       value={selected.text}
+                      style={{
+                        // Mirror the block's own formatting so bold and font are obvious here too.
+                        fontFamily: FONT_STACKS[selected.fontFamily],
+                        fontWeight: selected.bold ? 700 : 400,
+                      }}
                       onChange={(e) => updateAnnotation(selected.id, { text: e.target.value })}
                     />
                   </label>
@@ -653,15 +722,11 @@ export function PageInkEditor() {
                         top: `${ann.y * 100}%`,
                         minWidth: ann.width ? `${ann.width * 100}%` : undefined,
                         minHeight: ann.height ? `${ann.height * 100}%` : undefined,
-                        fontSize: `${ann.fontSize * RENDER_SCALE * 0.72}px`,
+                        // Extracted sizes are page units, so they scale 1:1 with the canvas.
+                        fontSize: `${ann.fontSize * RENDER_SCALE}px`,
                         color: ann.color,
                         fontWeight: ann.bold ? 700 : 400,
-                        fontFamily:
-                          ann.fontFamily === "times"
-                            ? "Times New Roman, serif"
-                            : ann.fontFamily === "courier"
-                              ? "Courier New, monospace"
-                              : "Helvetica, Arial, sans-serif",
+                        fontFamily: FONT_STACKS[ann.fontFamily],
                       }}
                       onPointerDown={(e) => onAnnotationPointerDown(e, ann)}
                       onPointerMove={onAnnotationPointerMove}

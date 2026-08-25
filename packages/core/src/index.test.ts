@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clampNorm,
+  createWhiteoutForAnnotation,
   exportPdfWithAnnotations,
   getWhiteoutRect,
   guessBold,
@@ -68,6 +69,14 @@ describe("whiteout", () => {
     const moved = withUpdatedWhiteout({ ...extracted, x: 0.4 });
     expect(isAnnotationModified(moved)).toBe(true);
     expect(getWhiteoutRect(moved)).not.toBeNull();
+  });
+
+  it("keeps the cover clear of the next run on the same line", () => {
+    const run = { x: 0.1, y: 0.2, width: 0.08, height: 0.02 };
+    const rect = createWhiteoutForAnnotation(run);
+    const neighbourStart = run.x + run.width + 0.005;
+    expect(rect.x + rect.width).toBeLessThan(neighbourStart);
+    expect(rect.x).toBeLessThanOrEqual(run.x);
   });
 
   it("never covers newly added text", () => {
