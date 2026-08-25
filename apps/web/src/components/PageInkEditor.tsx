@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import {
   UndoStack,
@@ -10,10 +12,10 @@ import {
   type TextBlock,
   type TextBlockStyle,
 } from "@korykaai/pageink-core";
-import { DropZone } from "./components/DropZone";
-import { PdfViewer } from "./components/PdfViewer";
-import { PrivacyBadge } from "./components/PrivacyBadge";
-import { Toolbar } from "./components/Toolbar";
+import { DropZone } from "@/components/DropZone";
+import { PdfViewer } from "@/components/PdfViewer";
+import { PrivacyBadge } from "@/components/PrivacyBadge";
+import { Toolbar } from "@/components/Toolbar";
 
 interface EditorState {
   pdfBytes: Uint8Array | null;
@@ -84,7 +86,7 @@ function downloadBytes(bytes: Uint8Array, fileName: string): void {
   URL.revokeObjectURL(url);
 }
 
-export function App() {
+export function PageInkEditor() {
   const [state, dispatch] = useReducer(editorReducer, initialState);
   const undoStack = useRef(new UndoStack<TextBlock[]>());
 
@@ -93,10 +95,13 @@ export function App() {
     [state.blocks, state.selectedId],
   );
 
-  const commitBlocks = useCallback((nextBlocks: TextBlock[]) => {
-    undoStack.current.push(state.blocks);
-    dispatch({ type: "set-blocks", blocks: nextBlocks });
-  }, [state.blocks]);
+  const commitBlocks = useCallback(
+    (nextBlocks: TextBlock[]) => {
+      undoStack.current.push(state.blocks);
+      dispatch({ type: "set-blocks", blocks: nextBlocks });
+    },
+    [state.blocks],
+  );
 
   const handleLoad = useCallback((pdfBytes: Uint8Array, fileName: string) => {
     undoStack.current.clear();
@@ -206,7 +211,11 @@ export function App() {
         event.preventDefault();
         handleUndo();
       }
-      if (mod && (event.key.toLowerCase() === "y" || (event.key.toLowerCase() === "z" && event.shiftKey))) {
+      if (
+        mod &&
+        (event.key.toLowerCase() === "y" ||
+          (event.key.toLowerCase() === "z" && event.shiftKey))
+      ) {
         event.preventDefault();
         handleRedo();
       }
@@ -214,7 +223,10 @@ export function App() {
         event.preventDefault();
         handleDelete();
       }
-      if (selectedBlock && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
+      if (
+        selectedBlock &&
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)
+      ) {
         event.preventDefault();
         const delta = event.shiftKey ? 10 : 1;
         const patch: Partial<TextBlock> = {};
@@ -278,11 +290,19 @@ export function App() {
       )}
 
       <footer className="app-footer">
-        <a href="https://github.com/kory-kaai/pageink" target="_blank" rel="noreferrer">
+        <a
+          href="https://github.com/kory-kaai/pageink"
+          target="_blank"
+          rel="noreferrer"
+        >
           Open source on GitHub
         </a>
         <span>·</span>
-        <a href="https://www.korykaai.com/open-source" target="_blank" rel="noreferrer">
+        <a
+          href="https://www.korykaai.com/open-source"
+          target="_blank"
+          rel="noreferrer"
+        >
           Kory Kaai open source
         </a>
       </footer>

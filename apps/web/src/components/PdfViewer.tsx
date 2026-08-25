@@ -1,3 +1,5 @@
+"use client";
+
 import {
   useCallback,
   useEffect,
@@ -5,14 +7,9 @@ import {
   useState,
   type MouseEvent,
 } from "react";
-import * as pdfjs from "pdfjs-dist";
 import type { TextBlock } from "@korykaai/pageink-core";
-import { TextBlockLayer } from "./TextBlockLayer";
-
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url,
-).toString();
+import { getPdfjs } from "@/lib/pdfjs";
+import { TextBlockLayer } from "@/components/TextBlockLayer";
 
 interface PdfViewerProps {
   pdfBytes: Uint8Array;
@@ -44,27 +41,33 @@ export function PdfViewer({
 
   useEffect(() => {
     let cancelled = false;
-    const task = pdfjs.getDocument({ data: pdfBytes.slice() });
 
-    void task.promise.then((pdf) => {
+    const load = async () => {
+      const pdfjs = await getPdfjs();
+      const task = pdfjs.getDocument({ data: pdfBytes.slice() });
+      const pdf = await task.promise;
+
       if (cancelled) {
+        await task.destroy();
         return;
       }
+
       setPageCount(pdf.numPages);
       if (pageIndex >= pdf.numPages) {
         onPageChange(pdf.numPages - 1);
       }
-    });
+    };
+
+    void load();
 
     return () => {
       cancelled = true;
-      void task.destroy();
     };
   }, [onPageChange, pageIndex, pdfBytes]);
 
   useEffect(() => {
     let cancelled = false;
-    let renderTask: pdfjs.RenderTask | null = null;
+    let renderTask: { cancel: () => void; promise: Promise<void> } | null = null;
     setLoading(true);
 
     const render = async () => {
@@ -73,6 +76,7 @@ export function PdfViewer({
         return;
       }
 
+      const pdfjs = await getPdfjs();
       const pdf = await pdfjs.getDocument({ data: pdfBytes.slice() }).promise;
       if (cancelled) {
         return;

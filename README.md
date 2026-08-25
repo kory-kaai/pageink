@@ -42,7 +42,7 @@ Everything runs in the browser. Files never leave the device.
 | Package | Purpose |
 | --- | --- |
 | [`@korykaai/pageink-core`](packages/core) | PDF export, text blocks, undo stack |
-| [`@korykaai/pageink-web`](apps/web) | React demo app (Vite) |
+| [`@korykaai/pageink-web`](apps/web) | Next.js demo app |
 
 ## Quick start
 
@@ -53,20 +53,17 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:3000`.
 
 ## Deploy to Vercel
 
-This repo is configured for Vercel at the root via [`vercel.json`](vercel.json):
+The Next.js app lives in `apps/web`. In Vercel:
 
-- **Install:** `npm install`
-- **Build:** core package, then the Vite web app
-- **Output:** `apps/web/dist`
-- **SPA rewrites:** all routes fall back to `index.html`
+1. Import `kory-kaai/pageink` from GitHub
+2. Set **Root Directory** to `apps/web`
+3. Deploy — [`apps/web/vercel.json`](apps/web/vercel.json) installs from the monorepo root, builds core, then runs `next build`
 
-Connect the GitHub repo in Vercel and deploy. No environment variables are required.
-
-For a custom domain such as `www.korykaai.com/tools/pdf`, point the path or subdomain to this Vercel project.
+No environment variables are required.
 
 ## Features
 

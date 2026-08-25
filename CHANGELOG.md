@@ -4,4 +4,4 @@
 
 - Initial release of PageInk web app and `@korykaai/pageink-core`
 - Browser-only PDF text overlay with export via pdf-lib
-- Vercel deployment config for the demo app
+- Next.js demo app with Vercel deployment config

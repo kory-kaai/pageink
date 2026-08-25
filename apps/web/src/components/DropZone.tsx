@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, useState, type DragEvent } from "react";
 
 interface DropZoneProps {
