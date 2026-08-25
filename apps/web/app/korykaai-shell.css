@@ -1,3 +1,21 @@
+/*
+ * This chrome is copied from korykaai.com, which ships a global border-box reset.
+ * PageInk's editor styles predate that reset and rely on content-box, so scope
+ * border-box to the shared header/footer only. Without it, links that use
+ * width:100% plus padding (dropdown items, drawer rows, full-width buttons)
+ * render wider than their container and the highlight spills outside the menu.
+ */
+.creative-site-header,
+.creative-site-header *,
+.creative-site-header *::before,
+.creative-site-header *::after,
+.site-footer,
+.site-footer *,
+.site-footer *::before,
+.site-footer *::after {
+  box-sizing: border-box;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   @keyframes creative-shell-enter {
     from {
@@ -378,6 +396,10 @@
   z-index: 55;
   min-width: min(15rem, calc(100vw - 2.5rem));
   max-width: min(19rem, calc(100vw - 2rem));
+  /* Long menus (e.g. Products) can exceed the viewport — cap below the bar and scroll. */
+  max-height: calc(100vh - 6rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.35rem;
   border-radius: 0.9rem;
   background: linear-gradient(160deg, rgba(10, 14, 12, 0.98) 0%, rgba(8, 12, 10, 0.99) 55%, rgba(10, 18, 15, 0.98) 100%);
